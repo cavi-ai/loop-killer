@@ -35,8 +35,8 @@ Subagent turns are ignored and not counted. The thresholds are constants in
 `hooks/register.ts`.
 
 When it fires, the plugin runs `/goal clear`, shows a toast, writes a log line, and
-appends a one-line notice to the turn's answer. If `/goal clear` fails, the failure
-is logged and the turn continues.
+appends a one-line notice to the turn's answer. The notice names the rule that
+fired and whether `/goal clear` succeeded.
 
 ## Install
 
