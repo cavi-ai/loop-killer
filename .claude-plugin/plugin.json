@@ -1,0 +1,19 @@
+{
+  "name": "loop-killer",
+  "version": "0.1.0",
+  "description": "Ends a stop-hook re-prompt loop: after repeated re-prompt turns with no tool work, it clears the active goal and says so.",
+  "author": {
+    "name": "Sasan Sotoodehfar",
+    "organization": "CAVI AI",
+    "organization_url": "https://cavi-ai.xyz"
+  },
+  "homepage": "https://github.com/cavi-ai/loop-killer",
+  "repository": "https://github.com/cavi-ai/loop-killer",
+  "license": "MIT",
+  "keywords": [
+    "hooks",
+    "goal",
+    "stop-hook",
+    "loop"
+  ]
+}
