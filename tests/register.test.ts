@@ -38,12 +38,13 @@ const spin = (replies: readonly (string | [string, true])[]): SessionMessage[] =
 const quiet: SessionMessage[] = [user('Ship the release.'), reply('Starting.')]
 
 /** Stands in for the engine beneath the plugin; `calls` collects what the plugin asked it to do. */
-const engine = (on: On, rows: SessionMessage[]) => {
+const engine = (on: On, rows: SessionMessage[], failClear = false) => {
   const state = { rows }
   const calls = { commands: [] as string[], toasts: [] as string[] }
   on('session.messages', () => ({ value: state.rows }))
   on('command.run', (_, e) => {
     calls.commands.push(`${e.command} ${e.args}`)
+    if (failClear) throw new Error('no active goal')
     return {}
   })
   on('ui.toast', (_, e) => {
@@ -74,13 +75,24 @@ test('clears the goal after 3 similar re-prompt replies with no tool work', asyn
   const done = await complete($)
   expect(calls.commands).toEqual(['goal clear'])
   expect(calls.toasts).toHaveLength(1)
-  expect(done.text).toContain('goal cleared')
+  expect(done.text).toContain('3 re-prompt turns with no tool work and the same reply; goal cleared.')
 })
 
 test('clears the goal after 6 dissimilar re-prompt replies with no tool work', async ($, on) => {
   const { calls } = engine(on, spin(DISSIMILAR))
-  await complete($)
+  const done = await complete($)
   expect(calls.commands).toEqual(['goal clear'])
+  expect(done.text).toContain('6 re-prompt turns with no tool work; goal cleared.')
+  expect(done.text).not.toContain('same reply')
+})
+
+test('reports a failed clear instead of claiming the goal was cleared', async ($, on) => {
+  const { calls } = engine(on, spin(SIMILAR), true)
+  const done = await complete($)
+  expect(calls.commands).toEqual(['goal clear'])
+  expect(calls.toasts).toHaveLength(1)
+  expect(done.text).toContain('could not clear the goal')
+  expect(done.text).not.toContain('goal cleared')
 })
 
 test('leaves the goal alone below the thresholds', async ($, on) => {

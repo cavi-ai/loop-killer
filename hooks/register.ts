@@ -26,7 +26,7 @@ const trailingSpin = (messages: readonly Msg[]) => {
   let i = messages.length - 1
   while (i >= 1) {
     const reply = messages[i], prompt = messages[i - 1]
-    if (reply.role !== 'assistant' || prompt.role !== 'user') break
+    if (reply?.role !== 'assistant' || prompt?.role !== 'user') break
     if (!REPROMPT.test(prompt.text.trim())) break
     if ((reply.toolUses?.length ?? 0) > 0) break
     replies.push(reply.text)
@@ -35,10 +35,7 @@ const trailingSpin = (messages: readonly Msg[]) => {
   return replies
 }
 
-const allSimilar = (replies: string[]) => {
-  for (let k = 1; k < replies.length; k++) if (similarity(replies[k - 1], replies[k]) < SIMILAR) return false
-  return true
-}
+const allSimilar = (replies: string[]) => replies.every((reply, k) => k === 0 || similarity(replies[k - 1]!, reply) >= SIMILAR)
 
 export const register: Register = on => {
   // At most one kill per 10 main-loop turns; -Infinity lets the first one through.
@@ -50,17 +47,19 @@ export const register: Register = on => {
     turns++
     const messages = (await $.session.messages()) as readonly Msg[]
     const replies = trailingSpin(messages)
-    const spinning = (replies.length >= SAME_REPLY_TURNS && allSimilar(replies)) || replies.length >= IDLE_TURNS
-    if (!spinning || turns - killedAt < 10) return next(e)
+    const same = replies.length >= SAME_REPLY_TURNS && allSimilar(replies)
+    if (!(same || replies.length >= IDLE_TURNS) || turns - killedAt < 10) return next(e)
     killedAt = turns
-    const why = `loop-killer: ${replies.length} re-prompt turns with no tool work and the same reply; goal cleared.`
+    const run = `loop-killer: ${replies.length} re-prompt turns with no tool work${same ? ' and the same reply' : ''}`
+    let why: string
     try {
       await $.command.run({ command: 'goal', args: 'clear' })
-      $.ui.toast(why)
-      $.ui.log(why)
+      why = `${run}; goal cleared.`
     } catch (error) {
-      $.ui.log(`loop-killer: could not clear the goal: ${String(error)}`)
+      why = `${run}; could not clear the goal: ${String(error)}`
     }
+    $.ui.toast(why)
+    $.ui.log(why)
     const done = await next(e)
     return { ...done, text: `${done.text}\n\n${why}` }
   })
