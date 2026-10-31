@@ -1,6 +1,6 @@
 {
   "name": "loop-killer",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Ends a stop-hook re-prompt loop: after repeated re-prompt turns with no tool work, it clears the active goal and says so.",
   "author": {
     "name": "Sasan Sotoodehfar",
