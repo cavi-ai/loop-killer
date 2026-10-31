@@ -22,6 +22,20 @@ Tests live in `tests/*.test.ts` and use the kit from `claude-code/testing`. The
 `.claude-plugin/types/` folder holds generated typings for the editor and is not
 committed.
 
+## Documentation
+
+The cavi-ai.xyz documentation lives in `docs/loop-killer/source`. Check it, then
+build and verify it locally:
+
+```sh
+node --test scripts/docs/*.test.mjs
+node scripts/docs/build.mjs
+node scripts/docs/verify.mjs
+```
+
+Publishing a GitHub release builds the same documentation from the release commit
+and attaches it to the release.
+
 ## Pull requests
 
 1. Branch from `main`.

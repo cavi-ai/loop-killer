@@ -1,0 +1,19 @@
+{
+  "title": "Loop Killer",
+  "version": "{{PRODUCT_VERSION}}",
+  "sections": [
+    {
+      "title": "Introduction",
+      "pages": [
+        { "title": "Overview", "path": "introduction/overview.md" },
+        { "title": "Installation", "path": "introduction/installation.md" }
+      ]
+    },
+    {
+      "title": "Reference",
+      "pages": [
+        { "title": "Detection", "path": "reference/detection.md" }
+      ]
+    }
+  ]
+}
