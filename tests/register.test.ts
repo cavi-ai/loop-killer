@@ -37,6 +37,10 @@ const spin = (replies: readonly (string | [string, true])[]): SessionMessage[] =
 
 const quiet: SessionMessage[] = [user('Ship the release.'), reply('Starting.')]
 
+/** The same loop as the engine reports it: each re-prompt is kept out of the conversation. */
+const hidden = (replies: readonly (string | [string, true])[]): SessionMessage[] =>
+  spin(replies).filter(row => row.text !== PROMPT)
+
 /** Stands in for the engine beneath the plugin; `calls` collects what the plugin asked it to do. */
 const engine = (on: On, rows: SessionMessage[], failClear = false) => {
   const state = { rows }
@@ -93,6 +97,19 @@ test('reports a failed clear instead of claiming the goal was cleared', async ($
   expect(calls.toasts).toHaveLength(1)
   expect(done.text).toContain('could not clear the goal')
   expect(done.text).not.toContain('goal cleared')
+})
+
+test('clears the goal when the engine keeps the re-prompts out of the conversation', async ($, on) => {
+  const { calls } = engine(on, hidden(SIMILAR))
+  const done = await complete($)
+  expect(calls.commands).toEqual(['goal clear'])
+  expect(done.text).toContain('3 re-prompt turns with no tool work and the same reply; goal cleared.')
+})
+
+test('a hidden re-prompt reply with a tool use breaks the run', async ($, on) => {
+  const { calls } = engine(on, hidden([SIMILAR[0]!, [SIMILAR[1]!, true], SIMILAR[2]!]))
+  await complete($)
+  expect(calls.commands).toEqual([])
 })
 
 test('leaves the goal alone below the thresholds', async ($, on) => {

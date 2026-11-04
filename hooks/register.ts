@@ -20,17 +20,21 @@ const similarity = (a: string, b: string) => {
   return shared / (wa.size + wb.size - shared || 1)
 }
 
-/** The trailing run of (re-prompt, reply) pairs with no tool work, newest first. */
+/**
+ * The trailing replies to re-prompts with no tool work, newest first. The engine keeps a stop
+ * hook's re-prompt out of the conversation, so a reply that directly follows another assistant
+ * message answered one; a re-prompt that does appear as a user message counts the same.
+ */
 const trailingSpin = (messages: readonly Msg[]) => {
   const replies: string[] = []
-  let i = messages.length - 1
-  while (i >= 1) {
-    const reply = messages[i], prompt = messages[i - 1]
-    if (reply?.role !== 'assistant' || prompt?.role !== 'user') break
-    if (!REPROMPT.test(prompt.text.trim())) break
-    if ((reply.toolUses?.length ?? 0) > 0) break
+  for (let i = messages.length - 1; i >= 1; i--) {
+    const reply = messages[i], before = messages[i - 1]
+    if (reply?.role !== 'assistant' || (reply.toolUses?.length ?? 0) > 0) break
+    const reprompted = before?.role === 'assistant'
+      || (before?.role === 'user' && REPROMPT.test(before.text.trim()))
+    if (!reprompted) break
     replies.push(reply.text)
-    i -= 2
+    if (before.role === 'user') i--
   }
   return replies
 }
