@@ -1,7 +1,8 @@
 import type { On, SessionMessage } from 'claude-code'
 import { expect, test, type Engine } from 'claude-code/testing'
 
-const PROMPT = 'Stop hook feedback: the goal is not met yet, keep working.'
+const PROMPT = 'Stop hook feedback:\n[the goal is not met yet]: keep working.'
+const REMINDER = '<system-reminder>\nThe output style is active.\n</system-reminder>'
 
 const SIMILAR = [
   'Waiting on the owner to finish the remaining step before the goal can complete.',
@@ -18,34 +19,57 @@ const DISSIMILAR = [
   'Bread dough rises faster in a warm kitchen overnight.',
 ]
 
-const user = (text: string): SessionMessage => ({ role: 'user', text, toolUses: [] })
-const reply = (text: string, withTool = false): SessionMessage => ({
+type Block = { type: string; [field: string]: unknown }
+type Message = { role: 'user' | 'assistant'; content: Block[] }
+
+const text = (value: string): Block => ({ type: 'text', text: value })
+const thinking: Block = { type: 'thinking', thinking: 'Deciding what to say.' }
+const toolUse: Block = { type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'ls' } }
+
+const user = (...texts: string[]): Message => ({ role: 'user', content: texts.map(text) })
+const toolResult: Message = { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }] }
+/** A reply that thinks first, as a model with extended thinking answers; `withTool` adds a tool call. */
+const reply = (value: string, withTool = false): Message => ({
   role: 'assistant',
-  text,
-  toolUses: withTool ? [{ tool_use_id: 'toolu_1', tool: 'Bash', input: { command: 'ls' } }] : [],
+  content: [thinking, text(value), ...(withTool ? [toolUse] : [])],
 })
 
 /** A conversation that ends in one re-prompt turn per entry; `true` marks a turn that used a tool. */
-const spin = (replies: readonly (string | [string, true])[]): SessionMessage[] => [
+const spin = (replies: readonly (string | [string, true])[]): Message[] => [
   user('Ship the release.'),
   reply('Starting.'),
   ...replies.flatMap(r => {
-    const [text, withTool] = typeof r === 'string' ? [r, false] : r
-    return [user(PROMPT), reply(text, withTool)]
+    const [value, withTool] = typeof r === 'string' ? [r, false] : r
+    return [user(REMINDER, PROMPT), reply(value, withTool), ...(withTool ? [toolResult] : [])]
   }),
 ]
 
-const quiet: SessionMessage[] = [user('Ship the release.'), reply('Starting.')]
+const quiet: Message[] = [user('Ship the release.'), reply('Starting.')]
 
-/** The same loop as the engine reports it: each re-prompt is kept out of the conversation. */
-const hidden = (replies: readonly (string | [string, true])[]): SessionMessage[] =>
-  spin(replies).filter(row => row.text !== PROMPT)
+const isHidden = (message: Message) =>
+  message.role === 'user'
+  && message.content.every(b => b.type === 'text' && /^(<system-reminder>|Stop hook feedback:)/.test(String(b.text)))
+
+/**
+ * The rows `session.messages()` reports for the same conversation, as Claude Code builds them:
+ * re-prompts and reminders left out, and each assistant block its own row.
+ */
+const rowsOf = (messages: readonly Message[]): SessionMessage[] =>
+  messages.filter(m => !isHidden(m)).flatMap((m): SessionMessage[] => m.role === 'user'
+    ? [{ role: 'user', text: m.content.filter(b => b.type === 'text').map(b => String(b.text)).join('\n'), toolUses: [] }]
+    : m.content.map(b => ({
+        role: 'assistant',
+        text: b.type === 'text' ? String(b.text) : '',
+        toolUses: b.type === 'tool_use'
+          ? [{ tool_use_id: String(b.id), tool: String(b.name), input: b.input as Record<string, unknown> }]
+          : [],
+      })))
 
 /** Stands in for the engine beneath the plugin; `calls` collects what the plugin asked it to do. */
-const engine = (on: On, rows: SessionMessage[], failClear = false) => {
-  const state = { rows }
+const engine = (on: On, messages: Message[], failClear = false) => {
+  const state = { messages }
   const calls = { commands: [] as string[], toasts: [] as string[] }
-  on('session.messages', () => ({ value: state.rows }))
+  on('session.messages', (_, e) => ({ value: e.as === 'api' ? state.messages : rowsOf(state.messages) }))
   on('command.run', (_, e) => {
     calls.commands.push(`${e.command} ${e.args}`)
     if (failClear) throw new Error('no active goal')
@@ -61,21 +85,21 @@ const engine = (on: On, rows: SessionMessage[], failClear = false) => {
 }
 
 let turn = 0
-const complete = ($: Engine, agentId?: string) =>
+const complete = ($: Engine, options: { agentId?: string; reason?: 'answer' | 'aborted' | 'error' } = {}) =>
   $.turn.complete({
     answer: 'answer',
     durationMs: 1,
-    isAborted: false,
+    isAborted: options.reason === 'aborted',
     turnId: `turn-${++turn}`,
-    reason: 'answer',
-    ...(agentId === undefined ? {} : { agentId }),
+    reason: options.reason ?? 'answer',
+    ...(options.agentId === undefined ? {} : { agentId: options.agentId }),
   })
 
 test('clears the goal after 3 similar re-prompt replies with no tool work', async ($, on) => {
   const { state, calls } = engine(on, quiet)
   await complete($)
   await complete($)
-  state.rows = spin(SIMILAR)
+  state.messages = spin(SIMILAR)
   const done = await complete($)
   expect(calls.commands).toEqual(['goal clear'])
   expect(calls.toasts).toHaveLength(1)
@@ -99,23 +123,17 @@ test('reports a failed clear instead of claiming the goal was cleared', async ($
   expect(done.text).not.toContain('goal cleared')
 })
 
-test('clears the goal when the engine keeps the re-prompts out of the conversation', async ($, on) => {
-  const { calls } = engine(on, hidden(SIMILAR))
-  const done = await complete($)
-  expect(calls.commands).toEqual(['goal clear'])
-  expect(done.text).toContain('3 re-prompt turns with no tool work and the same reply; goal cleared.')
-})
-
-test('a hidden re-prompt reply with a tool use breaks the run', async ($, on) => {
-  const { calls } = engine(on, hidden([SIMILAR[0]!, [SIMILAR[1]!, true], SIMILAR[2]!]))
+test('leaves the goal alone below the thresholds', async ($, on) => {
+  const { state, calls } = engine(on, spin(SIMILAR.slice(0, 2)))
+  await complete($)
+  state.messages = spin(DISSIMILAR.slice(0, 5))
   await complete($)
   expect(calls.commands).toEqual([])
 })
 
-test('leaves the goal alone below the thresholds', async ($, on) => {
-  const { state, calls } = engine(on, spin(SIMILAR.slice(0, 2)))
-  await complete($)
-  state.rows = spin(DISSIMILAR.slice(0, 5))
+test('an answer that interleaves thinking and text is not a loop', async ($, on) => {
+  const long: Message = { role: 'assistant', content: DISSIMILAR.flatMap(value => [thinking, text(value)]) }
+  const { calls } = engine(on, [user('Explain the release.'), long])
   await complete($)
   expect(calls.commands).toEqual([])
 })
@@ -123,24 +141,57 @@ test('leaves the goal alone below the thresholds', async ($, on) => {
 test('a reply with a tool use breaks the run', async ($, on) => {
   const { state, calls } = engine(on, spin([SIMILAR[0]!, [SIMILAR[1]!, true], SIMILAR[2]!]))
   await complete($)
-  state.rows = spin([...DISSIMILAR.slice(0, 3).map((r): [string, true] => [r, true]), ...DISSIMILAR.slice(3)])
+  state.messages = spin([...DISSIMILAR.slice(0, 3).map((r): [string, true] => [r, true]), ...DISSIMILAR.slice(3)])
   await complete($)
   expect(calls.commands).toEqual([])
 })
 
 test('a turn that is not a re-prompt breaks the run', async ($, on) => {
-  const rows = spin(SIMILAR)
-  rows.splice(4, 1, user('Please also update the changelog.'))
-  const { calls } = engine(on, rows)
+  const messages = spin(SIMILAR)
+  messages.splice(4, 1, user('Please also update the changelog.'))
+  const { calls } = engine(on, messages)
   await complete($)
   expect(calls.commands).toEqual([])
 })
 
+test('replies in another script that differ are not the same reply', async ($, on) => {
+  const { calls } = engine(on, spin(['ビルドはまだ実行中です', '請求書の合計は一致しています', '庭の柵は塗り直しが必要です']))
+  await complete($)
+  expect(calls.commands).toEqual([])
+})
+
+test('near-identical replies in another alphabet are the same reply', async ($, on) => {
+  const { calls } = engine(on, spin([
+    'Сборка ещё идёт на удалённом сервере',
+    'Сборка ещё идёт на удалённом сервере сейчас',
+    'Сборка ещё идёт на удалённом сервере сегодня',
+  ]))
+  const done = await complete($)
+  expect(calls.commands).toEqual(['goal clear'])
+  expect(done.text).toContain('3 re-prompt turns with no tool work and the same reply')
+})
+
+test('short replies with no words count as the same reply only when equal', async ($, on) => {
+  const { state, calls } = engine(on, spin(['OK.', 'No.', 'Hm.']))
+  await complete($)
+  expect(calls.commands).toEqual([])
+  state.messages = spin(['OK.', 'OK.', 'OK.'])
+  await complete($)
+  expect(calls.commands).toEqual(['goal clear'])
+})
+
 test('ignores a subagent turn', async ($, on) => {
   const { calls } = engine(on, spin(SIMILAR))
-  const done = await complete($, 'agent-1')
+  const done = await complete($, { agentId: 'agent-1' })
   expect(calls.commands).toEqual([])
   expect(done.text).toBe('answer')
+})
+
+test('an interrupted or failed turn leaves the goal alone', async ($, on) => {
+  const { calls } = engine(on, spin(SIMILAR))
+  await complete($, { reason: 'aborted' })
+  await complete($, { reason: 'error' })
+  expect(calls.commands).toEqual([])
 })
 
 test('allows the first kill on the first turn after load', async ($, on) => {
@@ -149,11 +200,12 @@ test('allows the first kill on the first turn after load', async ($, on) => {
   expect(calls.commands).toEqual(['goal clear'])
 })
 
-test('clears at most once in 10 turns', async ($, on) => {
-  const { calls } = engine(on, spin(SIMILAR))
+test('clears a later loop without waiting 10 turns', async ($, on) => {
+  const { state, calls } = engine(on, spin(SIMILAR))
   await complete($)
-  for (let i = 0; i < 9; i++) await complete($)
-  expect(calls.commands).toEqual(['goal clear'])
+  state.messages = [...state.messages, user('Set a new goal.'), reply('Working on it.')]
+  await complete($)
+  state.messages = [...state.messages, ...SIMILAR.flatMap(value => [user(PROMPT), reply(value)])]
   await complete($)
   expect(calls.commands).toEqual(['goal clear', 'goal clear'])
 })
