@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.1
+
+- Detect re-prompts that Claude Code keeps out of the conversation, so an active `/goal` loop is cleared.
+
 ## 0.2.0
 
 - Notice names the rule that fired and reports a failed `/goal clear`.

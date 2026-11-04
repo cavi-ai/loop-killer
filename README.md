@@ -9,10 +9,13 @@ tool calls, loop-killer runs `/goal clear` and says so.
 At the end of every main-session turn the plugin reads the conversation and takes
 the trailing run of re-prompt turns with no tool work:
 
-- A re-prompt turn is a user message that begins with `Stop hook feedback:`,
-  `Stop hook` (optionally preceded by `[`), or `Hook re-prompted`, ignoring case.
-- The assistant reply to it counts when it made no tool call.
-- The run ends at the first pair that is not a re-prompt or whose reply used a tool.
+- Claude Code keeps a stop hook's re-prompt out of the conversation a plugin reads,
+  so an assistant reply that directly follows another assistant reply answered a
+  re-prompt.
+- A user message that begins with `Stop hook feedback:`, `Stop hook` (optionally
+  preceded by `[`), or `Hook re-prompted`, ignoring case, is a re-prompt too.
+- A reply to a re-prompt counts when it made no tool call.
+- The run ends at the first reply that used a tool or answered any other message.
 
 The goal is cleared when the run holds either:
 
