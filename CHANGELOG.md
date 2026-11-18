@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.2
 
 - Read re-prompts from the Messages API form, so a reply with thinking counts once and a long answer is never taken for a loop.
 - Leave turns the person interrupted or an error ended alone, and clear a later loop without a 10-turn wait.
