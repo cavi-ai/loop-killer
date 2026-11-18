@@ -39,7 +39,10 @@ const isReprompt = (message: Message) =>
  */
 const trailingSpin = (messages: readonly Message[]) => {
   const replies: string[] = []
-  for (let i = messages.length - 1; i >= 1; i -= 2) {
+  // A turn that Claude Code's stop-hook block cap ended closes on a re-prompt it never answered.
+  const last = messages.at(-1)
+  const start = messages.length - (last !== undefined && isReprompt(last) ? 2 : 1)
+  for (let i = start; i >= 1; i -= 2) {
     const reply = messages[i]!, prompt = messages[i - 1]!
     if (reply.role !== 'assistant' || usesTools(reply) || !isReprompt(prompt)) break
     replies.push(texts(reply).join('\n'))

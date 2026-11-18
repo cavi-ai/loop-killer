@@ -5,6 +5,7 @@
 - Read re-prompts from the Messages API form, so a reply with thinking counts once and a long answer is never taken for a loop.
 - Leave turns the person interrupted or an error ended alone, and clear a later loop without a 10-turn wait.
 - Compare replies by words in any script; two replies with no words match only when their text is the same.
+- Clear the goal when Claude Code's stop-hook block cap ended the turn on an unanswered re-prompt.
 
 ## 0.2.1
 
