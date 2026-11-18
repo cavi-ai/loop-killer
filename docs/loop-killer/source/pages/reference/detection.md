@@ -13,6 +13,8 @@ re-prompt turns with no tool work.
   text is its text blocks, thinking left out.
 - The run ends at the first pair that is not a re-prompt and its answer, or
   whose answer used a tool.
+- A turn that Claude Code ended at its stop-hook block cap closes on a
+  re-prompt with no answer; that last re-prompt is skipped.
 
 ## When the goal is cleared
 

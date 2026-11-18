@@ -209,3 +209,10 @@ test('clears a later loop without waiting 10 turns', async ($, on) => {
   await complete($)
   expect(calls.commands).toEqual(['goal clear', 'goal clear'])
 })
+
+test('clears the goal when the stop-hook block cap ended the turn on an unanswered re-prompt', async ($, on) => {
+  const { calls } = engine(on, [...spin(DISSIMILAR), user(REMINDER, PROMPT)])
+  const done = await complete($)
+  expect(calls.commands).toEqual(['goal clear'])
+  expect(done.text).toContain('6 re-prompt turns with no tool work; goal cleared.')
+})
