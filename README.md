@@ -1,10 +1,10 @@
 # Loop Killer
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+**Your agent keeps answering. The hook keeps asking.**
 
 ![The encore nobody asked for. A tortoise stagehand closes the curtain on a parrot still giving its speech.](assets/loop-killer-hero.png)
 
-**Your agent keeps answering. The hook keeps asking.**
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 Loop Killer runs `/goal clear` when recognized stop-hook re-prompts produce repeated replies without tool work. It automates the manual clear step and reports the result.
 
